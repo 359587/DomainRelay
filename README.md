@@ -50,6 +50,59 @@ Domain Relay 是一个面向 macOS 的本地域名代理管理器。它把用户
 
 PAC 是系统代理配置，不是透明代理：只有遵循 macOS 自动代理设置的应用才会使用它。计量转发器不会解密 HTTPS，只能从 CONNECT 看到目标域名并统计隧道字节。
 
+## 安装与首次打开
+
+当前版本尚未使用 Apple Developer ID 正式签名，也未经过 Apple 公证。macOS Gatekeeper 可能提示“Apple 无法检查是否包含恶意软件”“无法验证开发者”，并只提供“移到废纸篓”或“完成”。这是当前发布方式的已知限制，不代表已经完成安全验证。
+
+> **安全提示**：只安装你自己从本仓库源码构建的版本，或从本项目 [GitHub Releases](https://github.com/359587/DomainRelay/releases) 获取的文件。不要对来源不明的 App 绕过 Gatekeeper。如果提示明确写着“将损坏你的电脑”或检测到恶意软件，请停止安装并提交 Issue。
+
+### 方式一：从源码运行或构建（推荐）
+
+```bash
+git clone https://github.com/359587/DomainRelay.git
+cd DomainRelay
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+构建适用于当前 Mac 架构的 DMG：
+
+```bash
+CSC_IDENTITY_AUTO_DISCOVERY=false pnpm package:mac
+open dist
+```
+
+当前 `v0.5.2` Release 只提供 GitHub 自动生成的源码包，未发布未经签名和公证的 DMG。
+
+### 方式二：安装 DMG
+
+以下步骤适用于你自行构建的 DMG，以及未来 Release 页面提供的 DMG：
+
+1. 连按打开 `.dmg` 文件。
+2. 将 `Domain Relay.app` 拖入“应用程序”文件夹。
+3. 推出 DMG，然后从“应用程序”文件夹打开 Domain Relay。
+4. 如果首次打开被 Gatekeeper 拦截，先关闭提示，不要立即清倒废纸篓。
+
+### 处理“移到废纸篓”或“无法验证开发者”提示
+
+优先使用 Apple 提供的图形界面方式：
+
+1. 先尝试打开 Domain Relay 一次，让 macOS 记录拦截结果。
+2. 打开“系统设置” → “隐私与安全性”，向下滚动到“安全性”。
+3. 找到 Domain Relay 的拦截提示，点按“仍要打开”。该按钮通常只会在尝试打开后的一段时间内出现。
+4. 再次确认“打开”，并按系统要求输入登录密码或使用可用的系统认证方式。
+
+Apple 的说明见[《在 Mac 上安全地打开 App》](https://support.apple.com/zh-cn/102445)。
+
+如果“仍要打开”没有出现，并且你确认 App 是自己从本仓库构建的，或来自本项目官方 Release，可以在终端移除该 App 的下载隔离属性：
+
+```bash
+sudo xattr -rd com.apple.quarantine "/Applications/Domain Relay.app"
+open "/Applications/Domain Relay.app"
+```
+
+`xattr` 只会移除 macOS 的下载隔离标记，不会为 App 补充签名、公证或恶意软件扫描。不要对来源不明的 App 执行此命令，也不要用临时重签名命令覆盖现有 App。
+
 ## 开发
 
 要求：macOS、Node.js 22+、pnpm 10+、Xcode Command Line Tools。
@@ -68,15 +121,17 @@ pnpm build
 CSC_IDENTITY_AUTO_DISCOVERY=false pnpm package:mac
 ```
 
-开发版和当前产物未签名、未公证，只适合本机验证。面向其他电脑分发前，需要配置 Apple Developer ID 完成签名和 notarization。
+开发版和当前产物只适合本机验证。签名限制和首次打开方法见[安装与首次打开](#安装与首次打开)。面向其他电脑正式分发前，需要配置 Apple Developer ID 完成签名和 notarization。
 
 ## 使用步骤
 
-1. 选择要应用 PAC 的网络服务，通常是 `Wi-Fi` 或有线网卡。
-2. 配置一个或多个代理服务器。
-3. 添加域名并选择对应代理出口；也可以点击“批量导入”，粘贴域名或选择 `.txt` 文件。
-4. 保存后点击“应用到 macOS”，通过管理员授权。
-5. 日常关闭窗口后应用会留在菜单栏，不需要再次授权。确实要完全退出时，选择“恢复并完全退出”，macOS 会请求管理员授权并恢复原设置。
+1. 从“应用程序”文件夹启动 Domain Relay；开发模式使用 `pnpm dev`。
+2. 选择要应用 PAC 的网络服务，通常是标记为当前默认入口的 `Wi-Fi` 或有线网卡。
+3. 配置一个或多个代理服务器，先点击“测试”确认代理能够连接。
+4. 添加域名并选择对应代理出口；也可以点击“批量导入”，粘贴域名或选择 `.txt` 文件。
+5. 保存后点击“应用到 macOS”，通过管理员授权。
+6. 在“连接诊断”和“流量统计”中确认目标域名确实经过预期代理。
+7. 日常关闭窗口后应用会留在菜单栏，不需要再次授权。确实要完全退出或卸载前，选择“恢复并完全退出”，macOS 会请求管理员授权并恢复原设置。
 
 ### 管理员授权与 Touch ID
 
