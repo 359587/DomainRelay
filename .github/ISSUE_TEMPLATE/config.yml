@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞 / Security vulnerability
+    url: https://github.com/359587/DomainRelay/security/advisories/new
+    about: 请通过私密漏洞报告提交，不要创建公开 Issue。

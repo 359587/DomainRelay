@@ -1,0 +1,17 @@
+node_modules/
+out/
+dist/
+.DS_Store
+*.log
+coverage/
+.env
+.env.*
+!.env.example
+*.cer
+*.key
+*.mobileprovision
+*.p12
+*.pem
+*.provisionprofile
+.idea/
+.vscode/

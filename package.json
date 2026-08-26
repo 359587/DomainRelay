@@ -1,0 +1,81 @@
+{
+  "name": "domain-relay",
+  "version": "0.5.2",
+  "private": true,
+  "description": "A macOS PAC manager that routes selected domains through configurable proxies.",
+  "keywords": [
+    "macos",
+    "pac",
+    "proxy",
+    "electron",
+    "domain-routing"
+  ],
+  "homepage": "https://github.com/359587/DomainRelay#readme",
+  "bugs": {
+    "url": "https://github.com/359587/DomainRelay/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/359587/DomainRelay.git"
+  },
+  "author": "Domain Relay Contributors",
+  "main": "./out/main/index.js",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "pnpm typecheck && electron-vite build",
+    "package:mac": "pnpm build && electron-builder --mac",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@electron-toolkit/preload": "^3.0.2",
+    "@electron-toolkit/utils": "^4.0.0",
+    "tldts": "^7.4.11"
+  },
+  "devDependencies": {
+    "@types/node": "^26.3.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "43.4.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.11"
+  },
+  "build": {
+    "appId": "local.domain-relay.app",
+    "productName": "Domain Relay",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "resources/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  },
+  "packageManager": "pnpm@10.31.0",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  }
+}

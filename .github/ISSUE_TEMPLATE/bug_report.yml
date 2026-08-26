@@ -1,0 +1,76 @@
+name: Bug 报告
+description: 报告可复现的功能或网络行为异常
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。提交前请删除真实代理凭据、公司域名和访问历史。安全问题请使用私密漏洞报告。
+
+  - type: input
+    id: version
+    attributes:
+      label: Domain Relay 版本
+      placeholder: 例如 0.5.2
+    validations:
+      required: true
+
+  - type: input
+    id: system
+    attributes:
+      label: macOS 与芯片
+      placeholder: 例如 macOS 15.6 / Apple M3
+    validations:
+      required: true
+
+  - type: dropdown
+    id: proxy
+    attributes:
+      label: 代理类型
+      options:
+        - HTTP
+        - HTTPS
+        - SOCKS5
+        - 不涉及上游代理
+        - 其他或不确定
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 请提供能够稳定复现问题的最小步骤。
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 脱敏后的日志或截图
+      description: 不要粘贴密码、Token、真实公司域名或完整访问历史。
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交确认
+      options:
+        - label: 我已移除代理凭据和敏感网络信息。
+          required: true
+        - label: 这不是需要私密报告的安全漏洞。
+          required: true
