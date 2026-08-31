@@ -55,6 +55,7 @@ export interface AutoProxySnapshot {
 
 export interface ActivationState {
   pacUrl: string
+  managedPacUrls?: string[]
   previous: AutoProxySnapshot[]
   activatedAt: string
 }

@@ -113,9 +113,10 @@ export interface AutoProxyRestorePlan {
 export function planAutoProxyRestore(
   previous: AutoProxySnapshot[],
   current: AutoProxySnapshot[],
-  managedPacUrl: string
+  managedPacUrls: string | readonly string[]
 ): AutoProxyRestorePlan {
   const currentByService = new Map(current.map((snapshot) => [snapshot.service, snapshot]))
+  const managedUrls = new Set(typeof managedPacUrls === 'string' ? [managedPacUrls] : managedPacUrls)
   const plan: AutoProxyRestorePlan = { targets: [], unchanged: [], skipped: [] }
 
   for (const snapshot of previous) {
@@ -128,7 +129,7 @@ export function planAutoProxyRestore(
       plan.unchanged.push(snapshot.service)
       continue
     }
-    if (!live.enabled || live.url === managedPacUrl) {
+    if (!live.enabled || (live.url !== null && managedUrls.has(live.url))) {
       plan.targets.push({ service: snapshot.service, url: snapshot.url, enabled: snapshot.enabled })
       continue
     }

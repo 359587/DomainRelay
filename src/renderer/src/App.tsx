@@ -119,8 +119,21 @@ export default function App(): React.JSX.Element {
 
   const handleSave = (): void => {
     void run(async () => {
-      await save()
-      setToast({ tone: 'success', message: '配置已保存；尚未改变系统网络设置' })
+      const routingChanged = Boolean(
+        state &&
+        draft &&
+        (JSON.stringify(state.config.rules) !== JSON.stringify(draft.rules) ||
+          JSON.stringify(state.config.proxies) !== JSON.stringify(draft.proxies))
+      )
+      const next = await save()
+      setToast({
+        tone: 'success',
+        message: state?.active && routingChanged
+          ? '配置已保存；域名规则已热更新并立即生效'
+          : next.active
+            ? '配置已保存；当前系统代理保持生效'
+            : '配置已保存；尚未改变系统网络设置'
+      })
     })
   }
 
@@ -377,7 +390,7 @@ export default function App(): React.JSX.Element {
               <>
                 <div className="save-state">
                   <span className="change-dot" data-dirty={dirty} />
-                  {dirty ? '有未保存的修改' : '所有修改已保存'}
+                  {dirty ? (state.active ? '有未保存的修改，保存后立即生效' : '有未保存的修改') : '所有修改已保存'}
                 </div>
                 <div className="toolbar-actions">
                   <button className="button button-ghost" type="button" onClick={() => void window.domainRelay.showConfigFile()}>
@@ -387,7 +400,7 @@ export default function App(): React.JSX.Element {
                     <EyeIcon /> PAC 预览
                   </button>
                   <button className="button button-save" type="button" onClick={handleSave} disabled={!dirty || busy}>
-                    保存
+                    {state.active ? '保存并热更新' : '保存'}
                   </button>
                 </div>
               </>
@@ -408,7 +421,7 @@ export default function App(): React.JSX.Element {
                 <span className="activation-icon"><RouteIcon /></span>
                 <div>
                   <strong>{state.trafficReady ? '域名代理与流量计量正在运行' : state.active ? '规则已应用，但当前入口未接管' : '域名代理尚未启用'}</strong>
-                  <p>{state.active ? `已应用到 ${activeServices} 个网络入口；关闭窗口后会在菜单栏继续运行，无需再次授权。` : '保存配置和应用代理无需授权；应用系统 PAC 时 macOS 会请求一次管理员授权。'}</p>
+                  <p>{state.active ? `已应用到 ${activeServices} 个网络入口；修改域名规则后保存即可立即刷新。` : '保存配置和应用代理无需授权；应用系统 PAC 时 macOS 会请求一次管理员授权。'}</p>
                 </div>
               </div>
               {state.active ? (
@@ -432,7 +445,7 @@ export default function App(): React.JSX.Element {
                 <strong>{state.active ? '日常关闭不需要密码' : '需要完全免授权？'}</strong>
                 <p>
                   {state.active
-                    ? '点击窗口左上角关闭按钮即可收进菜单栏。只有恢复系统 PAC 或完全退出时，才需要管理员授权。'
+                    ? '点击窗口左上角关闭按钮即可收进菜单栏。热更新或恢复系统 PAC 时，macOS 可能请求管理员授权。'
                     : '使用“应用代理”启动 Codex 等应用，不修改 macOS 网络设置，启动和退出都不需要管理员密码。'}
                 </p>
               </div>

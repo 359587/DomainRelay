@@ -52,4 +52,27 @@ describe('macOS network service discovery', () => {
       skipped: ['USB LAN']
     })
   })
+
+  it('restores either PAC revision while a hot update is in transition', () => {
+    const original = [
+      { service: 'Wi-Fi', enabled: false, url: null, capturedAt: '2026-08-26T00:00:00.000Z' },
+      { service: 'USB LAN', enabled: false, url: null, capturedAt: '2026-08-26T00:00:00.000Z' }
+    ]
+    const current = [
+      { service: 'Wi-Fi', enabled: true, url: 'http://127.0.0.1:47653/proxy.pac?revision=old', capturedAt: '2026-08-26T01:00:00.000Z' },
+      { service: 'USB LAN', enabled: true, url: 'http://127.0.0.1:47653/proxy.pac?revision=new', capturedAt: '2026-08-26T01:00:00.000Z' }
+    ]
+
+    expect(planAutoProxyRestore(original, current, [
+      'http://127.0.0.1:47653/proxy.pac?revision=old',
+      'http://127.0.0.1:47653/proxy.pac?revision=new'
+    ])).toEqual({
+      targets: [
+        { service: 'Wi-Fi', enabled: false, url: null },
+        { service: 'USB LAN', enabled: false, url: null }
+      ],
+      unchanged: [],
+      skipped: []
+    })
+  })
 })

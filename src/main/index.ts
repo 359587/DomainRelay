@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell, Tray, type OpenDialogOptions } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import type {
+  ActivationState,
   AppConfig,
   DiagnosticStatus,
   DomainDiagnosticCheck,
@@ -17,6 +18,7 @@ import { ConfigStore } from './config-store'
 import { getAutoProxy, getManualProxies, listNetworkServices, planAutoProxyRestore, setAutoProxies } from './network'
 import { generatePac, normalizeDomain, validateConfig } from './pac'
 import { PacServer } from './pac-server'
+import { buildPacUrl, isPacUrlForConfig } from './pac-url'
 import { testProxyConnection } from './proxy-test'
 import { createTrayIcon } from './tray-icon'
 import { TrafficHistoryStore, TrafficMonitor } from './traffic-monitor'
@@ -37,8 +39,8 @@ let trafficMonitor: TrafficMonitor
 let trafficProxyServer: TrafficProxyServer
 const launchedApplicationIds = new Set<string>()
 
-function pacUrl(config: AppConfig): string {
-  return `http://127.0.0.1:${config.pacPort}/proxy.pac`
+function managedPacUrls(activation: ActivationState): string[] {
+  return [...new Set([activation.pacUrl, ...(activation.managedPacUrls ?? [])])]
 }
 
 function sameStringSet(left: string[], right: string[]): boolean {
@@ -73,11 +75,11 @@ async function runtimeState(): Promise<RuntimeState> {
   const networkProxyStates = await readNetworkProxyStates(selectedServices)
   const activation = store.getActivation()
   const applicationStates = await readApplicationStates(config.applications, launchedApplicationIds)
-  const url = pacUrl(config)
+  const url = activation?.pacUrl ?? buildPacUrl(config)
   const activatedServices = activation?.previous.map((snapshot) => snapshot.service) ?? []
   const active = Boolean(
     activation &&
-      activation.pacUrl === url &&
+      isPacUrlForConfig(activation.pacUrl, config) &&
       sameStringSet(activatedServices, config.networkServices) &&
       networkProxyStates.length === config.networkServices.length &&
       networkProxyStates.every((state) => state.autoProxy.enabled && state.autoProxy.url === url) &&
@@ -131,6 +133,80 @@ async function saveConfig(nextConfig: AppConfig): Promise<RuntimeState> {
   const available = new Set((await listNetworkServices()).filter((service) => !service.disabled).map((service) => service.name))
   const unavailable = config.networkServices.filter((service) => !available.has(service))
   if (unavailable.length > 0) throw new Error(`以下网络服务不可用：${unavailable.join('、')}`)
+
+  const nextPacUrl = buildPacUrl(config)
+  const requiresPacRefresh = Boolean(activation && buildPacUrl(current) !== nextPacUrl)
+  if (activation && requiresPacRefresh) {
+    if (!pacServer.isRunning(config.pacPort) || !trafficProxyServer.isRunning(config.relayPort)) {
+      throw new Error('本地 PAC 或流量转发服务未运行，无法热更新；请先恢复系统设置后重新应用')
+    }
+
+    const before = await Promise.all(config.networkServices.map((service) => getAutoProxy(service)))
+    const ownedUrls = new Set(managedPacUrls(activation))
+    const noLongerManaged = before.filter(
+      (snapshot) => !snapshot.enabled || snapshot.url === null || !ownedUrls.has(snapshot.url)
+    )
+    if (noLongerManaged.length > 0) {
+      throw new Error(`以下网络服务的 PAC 已被外部修改，未执行热更新：${noLongerManaged.map((item) => item.service).join('、')}`)
+    }
+
+    const transitionActivation = {
+      ...activation,
+      pacUrl: nextPacUrl,
+      managedPacUrls: [...new Set([...managedPacUrls(activation), nextPacUrl])]
+    }
+    const rollbackFailures: string[] = []
+    try {
+      await store.saveConfig(config)
+      await store.saveActivation(transitionActivation)
+      await setAutoProxies(config.networkServices.map((service) => ({ service, url: nextPacUrl, enabled: true })))
+      const verified = await Promise.all(config.networkServices.map((service) => getAutoProxy(service)))
+      if (verified.some((snapshot) => !snapshot.enabled || snapshot.url !== nextPacUrl)) {
+        throw new Error('macOS 未在全部网络服务上刷新 PAC 地址')
+      }
+      await store.saveActivation({ ...transitionActivation, managedPacUrls: [nextPacUrl] })
+      return runtimeState()
+    } catch (error) {
+      try {
+        await store.saveConfig(current)
+      } catch (rollbackError) {
+        rollbackFailures.push(`配置回滚失败：${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`)
+      }
+
+      let networkRollbackFailed = false
+      try {
+        const live = await Promise.all(config.networkServices.map((service) => getAutoProxy(service)))
+        const beforeByService = new Map(before.map((snapshot) => [snapshot.service, snapshot]))
+        const rollbackTargets = live
+          .filter((snapshot) => snapshot.enabled && snapshot.url === nextPacUrl)
+          .map((snapshot) => {
+            const previous = beforeByService.get(snapshot.service)!
+            return { service: snapshot.service, url: previous.url, enabled: previous.enabled }
+          })
+        await setAutoProxies(rollbackTargets)
+        const rolledBack = await Promise.all(rollbackTargets.map((target) => getAutoProxy(target.service)))
+        if (rolledBack.some((snapshot, index) => {
+          const target = rollbackTargets[index]!
+          return snapshot.enabled !== target.enabled || snapshot.url !== target.url
+        })) {
+          throw new Error('macOS 未在全部网络服务上恢复原 PAC 地址')
+        }
+      } catch (rollbackError) {
+        networkRollbackFailed = true
+        rollbackFailures.push(`系统 PAC 回滚失败：${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`)
+      }
+
+      try {
+        await store.saveActivation(networkRollbackFailed ? transitionActivation : activation)
+      } catch (rollbackError) {
+        rollbackFailures.push(`恢复状态保存失败：${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`)
+      }
+
+      const reason = error instanceof Error ? error.message : String(error)
+      throw new Error(rollbackFailures.length > 0 ? `${reason}；${rollbackFailures.join('；')}` : reason)
+    }
+  }
+
   await store.saveConfig(config)
   if (!activation && config.relayPort !== current.relayPort) await trafficProxyServer.start(config.relayPort)
   return runtimeState()
@@ -152,7 +228,8 @@ async function activate(replaceExisting: boolean): Promise<OperationResult> {
 
   const previous = await Promise.all(config.networkServices.map((service) => getAutoProxy(service)))
   const activation = {
-    pacUrl: pacUrl(config),
+    pacUrl: buildPacUrl(config),
+    managedPacUrls: [buildPacUrl(config)],
     previous,
     activatedAt: new Date().toISOString()
   }
@@ -321,7 +398,7 @@ async function restore(): Promise<OperationResult> {
   const available = new Set((await listNetworkServices()).map((service) => service.name))
   const existingSnapshots = activation.previous.filter((snapshot) => available.has(snapshot.service))
   const current = await Promise.all(existingSnapshots.map((snapshot) => getAutoProxy(snapshot.service)))
-  const restorePlan = planAutoProxyRestore(activation.previous, current, activation.pacUrl)
+  const restorePlan = planAutoProxyRestore(activation.previous, current, managedPacUrls(activation))
   await setAutoProxies(restorePlan.targets)
   const messageParts = [
     restorePlan.targets.length > 0 ? `已恢复 ${restorePlan.targets.length} 个网络服务` : null,
