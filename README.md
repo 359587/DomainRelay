@@ -40,6 +40,12 @@ Domain Relay 是一个面向 macOS 的本地域名代理管理器。它把用户
 
 > 维护约定：以后每次向 `main` 提交新功能、行为修复、兼容性、安装或安全相关更新时，都在同一提交中同步更新本节。完整版本记录见 [CHANGELOG.md](CHANGELOG.md)。
 
+### 2026-09-30
+
+- **调整应用启动与权限归属**：通过 macOS LaunchServices（`open --env`）启动 Codex 等托管应用，并保留大小写代理变量、回环直连名单及代理标记，修正直接启动应用可执行文件时责任应用归到 Domain Relay 的启动方式。升级后需完全退出并重新启动托管应用。
+- **确认应用启动结果**：系统接受启动请求后，等待目标进程出现再标记为“代理中”；应用已运行、可执行文件不可访问、系统启动失败或进程等待超时均会明确报错，并新增对应回归测试。
+- **补充本地签名构建说明**：明确启用 ad-hoc 签名和严格校验，区分本地签名完整性、Apple Developer ID 正式签名与公证。
+
 ### 2026-08-31
 
 - **PAC 域名规则热更新**（[`4ebaa83`](https://github.com/359587/DomainRelay/commit/4ebaa8306d1bd90bcdab586ade030492ef4e3d4c)）：已启用系统 PAC 时，保存新增、删除、启停、域名或匹配范围变化会生成新的内容指纹地址并刷新 macOS 自动代理；增加刷新结果校验、失败回滚以及新旧 PAC 地址的安全恢复。
@@ -86,8 +92,16 @@ pnpm dev
 构建适用于当前 Mac 架构的 DMG：
 
 ```bash
-CSC_IDENTITY_AUTO_DISCOVERY=false pnpm package:mac
+pnpm package:mac --config.mac.identity=- --config.mac.strictVerify=true --publish never
 open dist
+```
+
+此命令显式启用 ad-hoc 本地签名，并在打包时进行严格签名校验。未配置有效证书时，默认打包可能跳过签名；仅重新打包或移除下载隔离标记不能保证签名完整。ad-hoc 不包含 Apple Developer ID 身份，也不等于 Apple 公证，首次打开仍可能需要系统确认。详见 [electron-builder 26 的 macOS 签名说明](https://www.electron.build/v26/docs/features/code-signing/code-signing-mac/)。
+
+Apple Silicon 的默认打包目录可使用以下命令复核；其他架构或自定义输出目录请替换为对应 `.app` 路径：
+
+```bash
+codesign --verify --deep --strict "dist/mac-arm64/Domain Relay.app"
 ```
 
 当前 `v0.5.2` Release 只提供 GitHub 自动生成的源码包，未发布未经签名和公证的 DMG。
@@ -136,7 +150,7 @@ pnpm dev
 pnpm typecheck
 pnpm test
 pnpm build
-CSC_IDENTITY_AUTO_DISCOVERY=false pnpm package:mac
+pnpm package:mac --config.mac.identity=- --config.mac.strictVerify=true --publish never
 ```
 
 开发版和当前产物只适合本机验证。签名限制和首次打开方法见[安装与首次打开](#安装与首次打开)。面向其他电脑正式分发前，需要配置 Apple Developer ID 完成签名和 notarization。
@@ -167,6 +181,10 @@ CSC_IDENTITY_AUTO_DISCOVERY=false pnpm package:mac
 4. 在“流量统计”中确认 `chatgpt.com`、`openai.com`、`oaiusercontent.com` 等实际目标域名出现下行流量。
 
 应用代理不会修改目标应用文件，也不会全局写入 shell 环境。代理变量只注入本次从 Domain Relay 启动的进程树。未配置域名由本地转发器直接连接，不计入代理流量统计。
+
+托管应用通过 macOS LaunchServices 启动，代理环境变量由 `open --env` 显式传递。启动器会检查应用是否已运行，并在系统启动请求成功后等待目标进程出现；启动失败不会回退到直接执行应用二进制文件。升级启动器后，需要完全退出托管应用，再从更新后的 Domain Relay 启动，已有进程不会自动改变环境或权限归属。
+
+代理设置与“系统设置 → 隐私与安全性 → 本地网络”权限分别生效。若独立终端能连接内网，而托管应用仍连接失败，应继续核对责任应用、本地网络授权和网络过滤；增加 `NO_PROXY` 不能替代系统授权，也不能解决普通 `nc` 的直接 TCP 连接被拦截问题。
 
 批量导入会按公共后缀智能判断规则类型：
 

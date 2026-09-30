@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { constants, promises as fs } from 'node:fs'
 import { basename, extname, join, normalize, resolve } from 'node:path'
-import { execFile, spawn } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { ManagedApplication, ManagedApplicationState } from '../shared/types'
 
 const execFileAsync = promisify(execFile)
 const LOCAL_BYPASS = 'localhost,127.0.0.1,::1'
+const APPLICATION_START_TIMEOUT_MS = 10_000
 
 async function readPlistValue(plistPath: string, key: string): Promise<string | null> {
   try {
@@ -103,16 +104,22 @@ export async function launchManagedApplication(
     throw new Error(`“${application.name}”已经在运行。请完全退出该应用后，再通过 Domain Relay 启动。`)
   }
   await fs.access(application.executablePath, constants.X_OK)
-  const child = spawn(application.executablePath, [], {
-    cwd: '/',
-    detached: true,
-    stdio: 'ignore',
-    env: buildProxyEnvironment(relayPort)
+  const proxyEnvironment = buildProxyEnvironment(relayPort, {})
+  // Let LaunchServices establish the app's identity instead of spawning its
+  // executable as our child. Only proxy overrides belong on the command line.
+  const environmentArguments = Object.entries(proxyEnvironment).flatMap(([key, value]) => [
+    '--env', `${key}=${value}`
+  ])
+  await execFileAsync('/usr/bin/open', ['-a', application.path, ...environmentArguments], {
+    env: { ...process.env, ...proxyEnvironment },
+    timeout: APPLICATION_START_TIMEOUT_MS
   })
-  await new Promise<void>((resolveSpawn, rejectSpawn) => {
-    child.once('spawn', resolveSpawn)
-    child.once('error', rejectSpawn)
-  })
-  child.unref()
+
+  // A successful open request can precede the process becoming visible to ps.
+  const deadline = Date.now() + APPLICATION_START_TIMEOUT_MS
+  while (!(await runningCommands()).some((command) => commandMatchesExecutable(command, application.executablePath))) {
+    if (Date.now() >= deadline) throw new Error(`已请求启动“${application.name}”，但未检测到运行进程，请检查系统提示后重试。`)
+    await new Promise<void>((resolveWait) => setTimeout(resolveWait, 100))
+  }
   launchedApplicationIds.add(application.id)
 }
