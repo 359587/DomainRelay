@@ -46,7 +46,7 @@
     "react-dom": "^19.2.8",
     "typescript": "^7.0.2",
     "vite": "^7.3.6",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.0"
   },
   "build": {
     "appId": "local.domain-relay.app",
